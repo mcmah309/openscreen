@@ -1973,6 +1973,7 @@ export function registerIpcHandlers(
 	getCountdownOverlayWindow?: () => BrowserWindow | null,
 	onRecordingStateChange?: (recording: boolean, sourceName: string) => void,
 	_switchToHud?: () => void,
+	options: { projectsDirectory?: string } = {},
 ) {
 	const appSettings = new AppSettingsStore(app.getPath("userData"));
 	const broadcastSelectedSource = (source: SelectedSource | null) => {
@@ -4994,7 +4995,8 @@ export function registerIpcHandlers(
 	// race destroyed two real project files), so a second instance means a second
 	// queue racing for the same path: temp+rename still keeps the file valid, but
 	// a save can land under a concurrent one and be silently lost.
-	const chatProjectsRoot = path.join(app.getPath("userData"), "projects");
+	const chatProjectsRoot =
+		options.projectsDirectory ?? path.join(app.getPath("userData"), "projects");
 	configureChatPersistence(chatProjectsRoot);
 	const aiEditionDocuments = new DocumentService(
 		chatProjectsRoot,
