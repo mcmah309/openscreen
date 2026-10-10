@@ -182,6 +182,14 @@ describe("parseCliArgs", () => {
 		expect(parse(["record", "--project", "demo.json"])).toMatchObject({ kind: "error" });
 	});
 
+	it("accepts automatic zoom planning in interactive edit sessions", () => {
+		expect(parse(["edit", "a.openscreen", "--auto-zoom", "--json"])).toMatchObject({
+			kind: "edit",
+			autoZoom: true,
+			json: true,
+		});
+	});
+
 	it("parses --auto-zoom", () => {
 		expect(parse(["export", "a.openscreen", "--auto-zoom"])).toMatchObject({
 			kind: "export",

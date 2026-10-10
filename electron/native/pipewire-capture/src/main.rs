@@ -33,6 +33,7 @@ mod dmabuf_import;
 mod encoder;
 mod events;
 mod ffmpeg;
+mod hyprland;
 mod input;
 mod portal;
 mod shim;
@@ -220,11 +221,16 @@ struct AudioSourceConfig {
 enum Message {
     Portal(Box<Result<portal::PortalStream, portal::PortalError>>),
     Stream(StreamEvent),
-    /// A left mouse-button press observed on evdev, carrying the press time in
-    /// milliseconds so the emitted click sample is stamped when it happened
-    /// rather than at the next throttled sample. See [`input`] for why this is
-    /// the only way to see a button on Wayland, and for its permission and
-    /// privacy model.
+    HyprlandPointer {
+        cx: f64,
+        cy: f64,
+        timestamp_ms: u64,
+    },
+    HyprlandUnavailable(String),
+    /// A left mouse-button press from evdev or the opt-in Hyprland binding,
+    /// carrying its timestamp so clicks are not delayed to the next sample.
+    /// See [`input`] for the standard Linux permission/privacy model and
+    /// [`hyprland`] for the temporary, non-consuming compositor binding.
     PointerButton(u64),
     /// A pointer reader thread stopped on a device error (typically an unplug);
     /// the string is the OS error. Surfaced as a warning so click capture going
@@ -302,6 +308,14 @@ fn main() {
         std::process::exit(0);
     }
 
+    // Temporary fallback: remove when XDPH metadata support is deployed.
+    // https://github.com/hyprwm/xdg-desktop-portal-hyprland/issues/444
+    // Never compete with the standard metadata provider, even when explicitly enabled.
+    let hyprland_cursor_workaround =
+        std::env::var("OPENSCREEN_HYPRLAND_CURSOR_WORKAROUND").as_deref() == Ok("1")
+            && !cursor_metadata_supported
+            && cursor_mode == portal::CursorMode::Embedded
+            && output_path.is_some();
     let (sender, receiver) = mpsc::channel::<Message>();
     spawn_stdin_reader(sender.clone());
     spawn_portal(sender.clone(), cursor_mode);
@@ -331,6 +345,7 @@ fn main() {
         bitrate: request.bitrate(),
         forced_encoder,
         cursor_mode,
+        hyprland_cursor_workaround,
         audio: request.audio_sources(),
         defer_start: request.defer_start,
     };
@@ -350,6 +365,7 @@ struct RunConfig {
     bitrate: Option<i64>,
     forced_encoder: Option<encoder::Backend>,
     cursor_mode: portal::CursorMode,
+    hyprland_cursor_workaround: bool,
     audio: Vec<AudioSourceConfig>,
     /// Wait for `record` on stdin before connecting to PipeWire. See
     /// [`Request::defer_start`].
@@ -547,7 +563,15 @@ fn begin_stream<W: Write>(
     prefer_dmabuf: bool,
     shared_memory_fallback: &mut Option<SharedMemoryFallback>,
 ) -> Result<(), ()> {
-    let portal::PortalStream { fd, fallback_fd, node_id, position, size, source_kind } = stream;
+    let portal::PortalStream {
+        fd,
+        fallback_fd,
+        node_id,
+        position,
+        size,
+        source_kind,
+        mapping_id: _,
+    } = stream;
     *shared_memory_fallback = if prefer_dmabuf {
         fallback_fd.map(|fd| SharedMemoryFallback {
             fd,
@@ -654,6 +678,8 @@ fn run<W: Write>(
     // picker has been answered.
     let mut armed = false;
     let mut cursor: Option<CursorState> = None;
+    let mut hyprland_sampler: Option<hyprland::Sampler> = None;
+    let mut hyprland_pointer_time = 0;
     let mut known_assets: HashSet<String> = HashSet::new();
     let mut pending_asset: Option<CursorAsset> = None;
     // Wall-clock ms at which the pw_stream last reached `streaming` (mutter began
@@ -758,9 +784,56 @@ fn run<W: Write>(
             // began (see `streaming_since`): a press while the picker is still up —
             // the click on its "Share" button — is older, so it is dropped even if
             // its message is delivered after the stream-state one.
+            Ok(Message::HyprlandPointer {
+                cx,
+                cy,
+                timestamp_ms,
+            }) => {
+                if let Some((width, height)) = size {
+                    cursor = Some(CursorState {
+                        x: (cx * width as f64).round() as i32,
+                        y: (cy * height as f64).round() as i32,
+                        asset_id: None,
+                    });
+                    hyprland_pointer_time = timestamp_ms;
+                    if !paused
+                        && streaming_since.is_some()
+                        && capture.as_ref().is_some_and(|c| c.started())
+                    {
+                        emit_sample(
+                            emitter,
+                            &cursor,
+                            content_rect(&capture, size),
+                            &mut pending_asset,
+                            None,
+                        );
+                    }
+                }
+            }
+            Ok(Message::HyprlandUnavailable(reason)) => {
+                hyprland_sampler = None;
+                cursor = None;
+                let _ = emitter.emit(&Event::Warning {
+                    code: "hyprland-cursor-unavailable".into(),
+                    message: format!(
+                        "Mouse-follow capture stopped: {reason}. Video recording continues."
+                    ),
+                });
+            }
             Ok(Message::PointerButton(press_ms)) => {
-                if streaming_since.is_some_and(|since| press_ms >= since) {
-                    emit_sample(emitter, &cursor, content_rect(&capture, size), &mut pending_asset, Some(press_ms));
+                if !paused
+                    && streaming_since.is_some_and(|since| press_ms >= since)
+                    && (!config.hyprland_cursor_workaround
+                        || (capture.as_ref().is_some_and(|c| c.started())
+                            && press_ms.abs_diff(hyprland_pointer_time) <= 100))
+                {
+                    emit_sample(
+                        emitter,
+                        &cursor,
+                        content_rect(&capture, size),
+                        &mut pending_asset,
+                        Some(press_ms),
+                    );
                 }
             }
 
@@ -1057,6 +1130,21 @@ fn run<W: Write>(
                         position_x: stream.position.map(|(x, _)| x),
                         position_y: stream.position.map(|(_, y)| y),
                     });
+                    if config.hyprland_cursor_workaround {
+                        if stream.source_kind == Some(portal::SourceKind::Monitor) {
+                            hyprland_sampler = Some(hyprland::start(
+                                stream.mapping_id.clone(),
+                                stream.size,
+                                config.sample_interval,
+                                sender.clone(),
+                            ));
+                        } else {
+                            let _ = emitter.emit(&Event::Warning {
+                                code: "hyprland-cursor-unavailable".into(),
+                                message: "The temporary Hyprland cursor provider supports monitor captures only; this recording has no mouse-follow data.".into(),
+                            });
+                        }
+                    }
                     granted_kind = stream.source_kind;
 
                     if config.defer_start && !armed {
@@ -1239,6 +1327,7 @@ fn run<W: Write>(
                             .to_owned(),
                     });
                     let retry = portal::PortalStream {
+                        mapping_id: None,
                         fd: fallback.fd,
                         fallback_fd: None,
                         node_id: fallback.node_id,
@@ -1365,14 +1454,29 @@ fn run<W: Write>(
                 // A new sprite ships immediately; positions respect the sample
                 // interval so a 120fps compositor cannot flood stdout.
                 if asset_is_new || last_emit.elapsed() >= config.sample_interval {
-                    emit_sample(emitter, &cursor, content_rect(&capture, size), &mut pending_asset, None);
+                    emit_sample(
+                        emitter,
+                        &cursor,
+                        content_rect(&capture, size),
+                        &mut pending_asset,
+                        None,
+                    );
                     last_emit = Instant::now();
                 }
             }
 
             Err(RecvTimeoutError::Timeout) => {
-                if cursor.is_some() && last_emit.elapsed() >= config.sample_interval {
-                    emit_sample(emitter, &cursor, content_rect(&capture, size), &mut pending_asset, None);
+                if !config.hyprland_cursor_workaround
+                    && cursor.is_some()
+                    && last_emit.elapsed() >= config.sample_interval
+                {
+                    emit_sample(
+                        emitter,
+                        &cursor,
+                        content_rect(&capture, size),
+                        &mut pending_asset,
+                        None,
+                    );
                     last_emit = Instant::now();
                 }
                 // No advance here: a timeout means a tick has passed, so the
@@ -1386,6 +1490,7 @@ fn run<W: Write>(
     // Before the file is closed: this joins the PipeWire thread, so no callback
     // can fire against a freed Sender or write into a mailbox that is about to
     // be dropped.
+    drop(hyprland_sampler);
     drop(session);
 
     if let Some(capture) = capture {

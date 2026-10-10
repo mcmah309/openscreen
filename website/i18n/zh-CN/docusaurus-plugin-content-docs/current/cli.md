@@ -67,6 +67,8 @@ if openscreen edit take.openscreen; then
 fi
 ```
 
+`--auto-zoom` 会在编辑前，根据录制的点击添加跟随鼠标的建议缩放区域，并保留现有缩放区域。
+
 ### `openscreen record` {#openscreen-record}
 
 要从命令行录制屏幕，请运行 `record`。它驱动的是与桌面应用相同的录制钩子，生成的文件会保存到应用的录制目录中，与在图形界面中录制的内容放在一起：包括屏幕视频，以及（在采集到指针数据时）一个供可编辑光标和 `--auto-zoom` 读取的 `<video>.cursor.json` 光标遥测文件。

@@ -3638,7 +3638,7 @@ pub fn cursor_alpha(
     track: &crate::cursor::CursorTrack,
     t: f32,
 ) -> f32 {
-    if !scene.map(|s| s.cursor.show).unwrap_or(cfg.cursor) {
+    if track.embedded || !scene.map(|s| s.cursor.show).unwrap_or(cfg.cursor) {
         return 0.0;
     }
     let idle_alpha = track.opacity_at(t, live.cursor_auto_hide);
@@ -6923,6 +6923,33 @@ mod tests {
         let on = tilt(track(vec![]));
         assert!(on[1] > 0.75 * crate::regions::CLICK_IMPACT_DEG, "garde : {on:?}");
         assert_eq!(tilt(track(vec![(0.0, true), (1.48, false)])), on);
+    }
+
+    #[test]
+    fn embedded_cursor_is_not_drawn_but_still_drives_the_follow_camera() {
+        let cfg = crate::config::all().pop().unwrap();
+        let json = zoomed_golden_scene_json().replace(
+            r#""rotation":"none""#,
+            r#""rotation":"orbit","focusMode":"auto""#,
+        );
+        let scene = Scene::from_json(&json).unwrap();
+        let mut track = crate::cursor::CursorTrack::new(
+            (0..=90).map(|i| (i as f32 / 30.0, 0.55, 0.3)).collect(),
+            vec![],
+            vec![],
+        );
+        let live = live_params_from_scene(&scene);
+        assert!(cursor_alpha(Some(&scene), &cfg, &live, &track, 1.5) > 0.0);
+        track.embedded = true;
+        assert_eq!(cursor_alpha(Some(&scene), &cfg, &live, &track, 1.5), 0.0);
+        let track = Box::leak(Box::new(track));
+        let frame = plan_frame(&FrameGeometryInput {
+            cursor: Some(track),
+            ..golden_input(&scene, &cfg)
+        });
+        let camera = frame.camera.unwrap();
+        assert!(camera.aim[0] > 0.74);
+        assert!(camera.orbit[0] > 0.89);
     }
 
     /// L'orbite en focus auto passe par `plan_frame` : l'écran n'est pas incliné, la caméra vise et tourne

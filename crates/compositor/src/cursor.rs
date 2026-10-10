@@ -30,6 +30,8 @@ fn smoothstep01(x: f32) -> f32 {
 
 #[derive(Clone)]
 pub struct CursorTrack {
+    /// La piste pilote la caméra, mais le pointeur est déjà dans les pixels.
+    pub embedded: bool,
     /// (t_secondes, cx, cy) normalisés dans le cadre screen, triés.
     samples: Vec<(f32, f32, f32)>,
     /// Même piste après lissage exponentiel adaptatif — ce que le suivi auto du zoom doit
@@ -154,6 +156,7 @@ impl CursorTrack {
             .map(|&tc| sample_at(&samples, tc).unwrap_or((0.0, 0.0)))
             .collect();
         CursorTrack {
+            embedded: false,
             samples,
             follow_samples,
             clicks,
@@ -251,9 +254,9 @@ impl CursorTrack {
         clicks.sort_by(|a, b| a.partial_cmp(b).unwrap());
         types.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
         visibility.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-        Ok(CursorTrack::new_with_visibility(
-            samples, clicks, types, visibility,
-        ))
+        let mut track = CursorTrack::new_with_visibility(samples, clicks, types, visibility);
+        track.embedded = v["cursorEmbedded"].as_bool().unwrap_or(false);
+        Ok(track)
     }
 
     /// Position lissée au temps `t`, pour le suivi auto du zoom. La télémétrie brute est
@@ -460,12 +463,7 @@ impl CursorTrack {
     /// bruts (le bounce est temporel, pas positionnel — ne doit pas suivre le lissage).
     pub fn smoothed(&self, factor: f32) -> CursorTrack {
         if self.samples.len() < 2 || factor <= 0.0 {
-            return CursorTrack::new_with_visibility(
-                self.samples.clone(),
-                self.clicks.clone(),
-                self.types.clone(),
-                self.visibility.clone(),
-            );
+            return self.clone();
         }
         const STEP_S: f32 = 1.0 / 240.0;
         let start = self.samples[0].0;
@@ -524,6 +522,7 @@ impl CursorTrack {
         // déplace la trajectoire, pas la chronologie de ce que faisait l'utilisateur. Les points
         // cliqués restent ceux de la piste brute.
         CursorTrack {
+            embedded: self.embedded,
             click_points: self.click_points.clone(),
             ..CursorTrack::new_with_visibility(
                 samples,
@@ -833,6 +832,34 @@ mod tests {
         let smoothed = track.smoothed(0.4);
         assert_eq!(smoothed.type_at(0.1), Some("arrow"));
         assert_eq!(smoothed.type_at(0.7), Some("text"));
+    }
+
+    #[test]
+    fn embedded_cursor_tracks_remain_available_to_the_camera_after_smoothing() {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "openscreen-embedded-{}-{unique}.json",
+            std::process::id()
+        ));
+        std::fs::write(
+            &path,
+            r#"{"cursorEmbedded":true,"samples":[
+            {"timeMs":0,"cx":0.2,"cy":0.3,"visible":true},
+            {"timeMs":500,"cx":0.8,"cy":0.7,"visible":true,"interactionType":"click"}
+        ]}"#,
+        )
+        .unwrap();
+        let track = CursorTrack::load(path.to_str().unwrap(), 0.0, 1.0).unwrap();
+        std::fs::remove_file(path).unwrap();
+        assert!(track.embedded);
+        assert!(track.visible_at(0.5));
+        assert_eq!(track.clicks, vec![0.5]);
+        assert!(track.smoothed(0.0).embedded);
+        assert!(track.smoothed(0.5).embedded);
+        assert!(track.smoothed(0.5).at(0.5).is_some());
     }
 
     #[test]

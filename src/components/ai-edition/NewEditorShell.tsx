@@ -394,7 +394,7 @@ export function NewEditorShell({ fileSession }: { fileSession?: EditorFileSessio
 			if (!window.electronAPI) return;
 			if (fileSession) {
 				try {
-					await loadEditorFile(fileSession.projectPath);
+					await loadEditorFile(fileSession.projectPath, fileSession.autoZoom);
 				} catch (error) {
 					fileSession.onLoadError(error);
 				}

@@ -67,6 +67,8 @@ if openscreen edit take.openscreen; then
 fi
 ```
 
+`--auto-zoom` adds suggested mouse-follow zoom regions from recorded clicks before editing; existing zoom regions are preserved.
+
 ### `openscreen record`
 
 To record the screen from the command line, run `record`. It drives the same recording hook as the desktop app, and the files land in the app's recordings directory, next to recordings made in the GUI: the screen video and, when pointer data was captured, a `<video>.cursor.json` cursor-telemetry file that the editable cursor and `--auto-zoom` read.

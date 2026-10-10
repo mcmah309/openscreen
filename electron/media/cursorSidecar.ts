@@ -149,6 +149,7 @@ export async function readCursorRecordingFileAt(
 			provider: (parsed?.provider === "native" ? "native" : "none") as CursorProviderKind,
 			samples,
 			assets,
+			...(parsed?.cursorEmbedded === true ? { cursorEmbedded: true } : {}),
 		};
 	} catch (error) {
 		const nodeError = error as NodeJS.ErrnoException;

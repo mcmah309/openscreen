@@ -52,8 +52,7 @@ rustPlatform.buildRustPackage {
     let
       fs = lib.fileset;
       isStorePath =
-        builtins.storeDir
-        == builtins.substring 0 (builtins.stringLength builtins.storeDir) (toString ../.);
+        builtins.storeDir == builtins.substring 0 (builtins.stringLength builtins.storeDir) (toString ../.);
       baseFiles = if isStorePath then fs.fromSource (lib.cleanSource ../.) else fs.gitTracked ../.;
       crate = ../electron/native/pipewire-capture;
     in
@@ -132,9 +131,8 @@ rustPlatform.buildRustPackage {
       "$out/bin/openscreen-pipewire-helper"
   '';
 
-  # The suite covers the accumulator on the TypeScript side; the crate itself has
-  # no tests, and cargo test here would only rebuild it.
-  doCheck = false;
+  # Includes geometry/IPC regression tests for the temporary Hyprland provider.
+  doCheck = true;
 
   meta = {
     description = "PipeWire/portal capture helper for OpenScreen";

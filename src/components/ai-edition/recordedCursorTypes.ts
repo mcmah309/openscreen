@@ -54,7 +54,7 @@ function stateChangesOf(videoPath: string): Promise<CursorStateChange[]> {
 		changes = Promise.resolve()
 			.then(() => nativeBridgeClient.cursor.getRecordingData(videoPath))
 			.then((data) => {
-				const read = cursorStateChanges(data.samples);
+				const read = data.cursorEmbedded ? [] : cursorStateChanges(data.samples);
 				hasCursorByPath.set(videoPath, read.length > 0);
 				return read;
 			})

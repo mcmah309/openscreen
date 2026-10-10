@@ -67,6 +67,8 @@ if openscreen edit take.openscreen; then
 fi
 ```
 
+`--auto-zoom` fügt vor der Bearbeitung vorgeschlagene Zoom-Bereiche hinzu, die anhand aufgezeichneter Klicks dem Mauszeiger folgen. Vorhandene Zoom-Bereiche bleiben erhalten.
+
 ### `openscreen record` {#openscreen-record}
 
 Um den Bildschirm über die Kommandozeile aufzunehmen, führe `record` aus. Der Befehl nutzt denselben Aufnahme-Hook wie die Desktop-App, und die Dateien landen im Aufnahmeverzeichnis der App, neben den Aufnahmen aus der GUI: das Bildschirmvideo und, wenn Zeigerdaten erfasst wurden, eine Cursor-Telemetriedatei `<video>.cursor.json`, die der bearbeitbare Cursor und `--auto-zoom` auslesen.

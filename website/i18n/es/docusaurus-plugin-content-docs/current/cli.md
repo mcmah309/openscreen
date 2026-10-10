@@ -67,6 +67,8 @@ if openscreen edit take.openscreen; then
 fi
 ```
 
+`--auto-zoom` añade regiones de zoom sugeridas que siguen el cursor a partir de los clics grabados antes de editar; conserva las regiones existentes.
+
 ### `openscreen record` {#openscreen-record}
 
 Para grabar la pantalla desde la línea de comandos, ejecuta `record`. Usa el mismo mecanismo de grabación que la app de escritorio, y los archivos se guardan en el directorio de grabaciones de la app, junto a las grabaciones hechas desde la interfaz gráfica: el video de la pantalla y, cuando se capturaron datos del puntero, un archivo de telemetría del cursor `<video>.cursor.json` que leen el cursor editable y `--auto-zoom`.

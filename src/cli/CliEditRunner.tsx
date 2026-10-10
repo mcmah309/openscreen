@@ -20,9 +20,10 @@ export default function CliEditRunner() {
 				if (request.kind !== "edit") {
 					throw new Error(`cli-edit window received a ${request.kind} request`);
 				}
-				const { projectPath, outPath } = request;
+				const { projectPath, outPath, autoZoom } = request;
 				setFileSession({
 					projectPath,
+					autoZoom,
 					onLoadError: fail,
 					onFinish: async (document) => {
 						await window.electronAPI.cliDone({

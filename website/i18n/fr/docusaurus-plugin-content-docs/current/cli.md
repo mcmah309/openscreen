@@ -67,6 +67,8 @@ if openscreen edit take.openscreen; then
 fi
 ```
 
+`--auto-zoom` ajoute avant le montage des zones de zoom suggérées qui suivent le curseur à partir des clics enregistrés ; les zones existantes sont conservées.
+
 ### `openscreen record` {#openscreen-record}
 
 Pour enregistrer l'écran en ligne de commande, lancez `record`. La commande utilise le même hook d'enregistrement que l'application de bureau, et les fichiers sont écrits dans le dossier des enregistrements de l'application, à côté des enregistrements faits dans l'interface graphique : la vidéo de l'écran et, quand des données de pointeur ont été capturées, un fichier de télémétrie du curseur `<video>.cursor.json`, que lisent le curseur éditable et `--auto-zoom`.

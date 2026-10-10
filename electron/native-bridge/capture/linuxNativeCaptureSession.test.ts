@@ -60,11 +60,11 @@ class FakeHelper extends EventEmitter {
 const spawnMock = vi.mocked(spawn);
 let helper: FakeHelper;
 
-function newSession(deferStart = false) {
+function newSession(deferStart = false, cursorMode: "metadata" | "embedded" = "metadata") {
 	return new LinuxNativeCaptureSession({
 		...(deferStart ? { deferStart: true } : {}),
 		outputPath: "/tmp/recording.mp4",
-		cursorMode: "metadata",
+		cursorMode,
 		fps: 30,
 		audio: {
 			system: { enabled: false },
@@ -140,6 +140,46 @@ describe("LinuxNativeCaptureSession", () => {
 	 * and since `SelectSources` cannot name a source, "record this window" then
 	 * had no way to mean anything. The request must carry no token at all.
 	 */
+	it("marks embedded cursor telemetry so camera tracking never draws a replacement pointer", async () => {
+		const session = newSession(false, "embedded");
+		await startReady(session);
+		helper.emitEvent({
+			event: "capture-started",
+			timestampMs: 1000,
+			width: 1280,
+			height: 720,
+			fps: 30,
+		});
+		helper.emitEvent({
+			event: "cursor-sample",
+			timestampMs: 1100,
+			x: 640,
+			y: 360,
+			width: 1280,
+			height: 720,
+			visible: true,
+			interactionType: "click",
+		});
+		await flushStdout();
+		const stopping = session.stop();
+		await flushStdout();
+		helper.emitEvent({
+			event: "capture-stopped",
+			timestampMs: 2000,
+			path: "/tmp/recording.mp4",
+			durationMs: 900,
+			frames: 27,
+			dropped: 0,
+		});
+		await flushStdout();
+		helper.emit("exit", 0, null);
+		const result = await stopping;
+		expect(result.cursor.cursorEmbedded).toBe(true);
+		expect(result.cursor.samples).toEqual([
+			expect.objectContaining({ timeMs: 100, cx: 0.5, cy: 0.5, interactionType: "click" }),
+		]);
+	});
+
 	it("sends no restore token to the helper", async () => {
 		await startReady(newSession());
 

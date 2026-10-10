@@ -53,18 +53,26 @@ rustPlatform.buildRustPackage {
     let
       fs = lib.fileset;
       isStorePath =
-        builtins.storeDir
-        == builtins.substring 0 (builtins.stringLength builtins.storeDir) (toString ../.);
+        builtins.storeDir == builtins.substring 0 (builtins.stringLength builtins.storeDir) (toString ../.);
       baseFiles = if isStorePath then fs.fromSource (lib.cleanSource ../.) else fs.gitTracked ../.;
     in
     fs.toSource {
-      root = ../crates;
-      fileset = fs.intersection baseFiles ../crates;
+      root = ../.;
+      # Library tests read the bundled fonts, cursor sprites and segmentation
+      # model, plus the frontend constants used by the arrow-bounds parity test.
+      fileset = fs.intersection baseFiles (
+        fs.unions [
+          ../crates
+          ../public
+          ../src/lib/ai-edition/annotations/arrowBounds.ts
+        ]
+      );
     };
 
   # No git dependencies in the lockfile, so this needs no hash of its own and
   # cannot go stale the way npmDepsHash did.
   cargoLock.lockFile = ../crates/Cargo.lock;
+  sourceRoot = "source/crates";
 
   nativeBuildInputs = [
     # Supplies libclang for bindgen, which build.rs uses to read ffmpeg headers.
@@ -168,8 +176,19 @@ rustPlatform.buildRustPackage {
     "compositor-view-napi"
   ];
 
-  # The suite targets Windows; running it on this platform proves nothing.
-  doCheck = false;
+  # Portable library tests include cursor-sidecar and camera-follow regressions.
+  # GPU integration tests and the Windows-only poc-d3d stay outside this build.
+  doCheck = true;
+  # Cargo's test executable must load the renamed FFmpeg symbols too. The
+  # build environment otherwise finds nixpkgs' original libraries first.
+  preCheck = ''
+    export LD_LIBRARY_PATH="$FFMPEG_DIR/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+  '';
+  cargoTestFlags = [
+    "-p"
+    "openscreen-compositor"
+    "--lib"
+  ];
 
   installPhase = ''
     runHook preInstall

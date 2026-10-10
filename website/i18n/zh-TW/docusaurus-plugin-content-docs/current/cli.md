@@ -67,6 +67,8 @@ if openscreen edit take.openscreen; then
 fi
 ```
 
+`--auto-zoom` 會在編輯前，根據錄製的點擊加入跟隨滑鼠的建議縮放區域，並保留現有縮放區域。
+
 ### `openscreen record` {#openscreen-record}
 
 若要從命令列錄製螢幕，請執行 `record`。它驅動的是與桌面應用程式相同的錄影機制，檔案會存放在應用程式的錄影目錄中，與在圖形介面中錄製的檔案放在一起：包括螢幕影片，以及在擷取到指標資料時產生的 `<video>.cursor.json` 游標遙測檔，可編輯游標與 `--auto-zoom` 都會讀取這個檔案。

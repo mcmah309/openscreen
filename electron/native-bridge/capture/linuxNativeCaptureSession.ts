@@ -448,7 +448,10 @@ export class LinuxNativeCaptureSession {
 					durationMs: payload.durationMs,
 					frames: payload.frames,
 					droppedFrames: payload.dropped,
-					cursor: this.cursor.toRecordingData(),
+					cursor: {
+						...this.cursor.toRecordingData(),
+						...(this.config.cursorMode === "embedded" ? { cursorEmbedded: true } : {}),
+					},
 					...(this.sourceKind ? { sourceKind: this.sourceKind } : {}),
 					...(this.videoEncoder ? { videoEncoder: this.videoEncoder } : {}),
 				};

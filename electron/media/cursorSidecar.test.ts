@@ -41,6 +41,23 @@ async function writeSidecar(videoPath: string, payload: unknown): Promise<void> 
 }
 
 describe("readCursorSidecar", () => {
+	it("preserves embedded-cursor tracking without losing click telemetry", async () => {
+		const video = path.join(dir, "embedded.mp4");
+		await writeSidecar(video, {
+			version: 2,
+			provider: "native",
+			cursorEmbedded: true,
+			samples: [{ timeMs: 100, cx: 0.7, cy: 0.2, interactionType: "click", visible: true }],
+			assets: [],
+		});
+		const data = await readCursorRecordingFileAt(`${video}.cursor.json`);
+		expect(data.cursorEmbedded).toBe(true);
+		const telemetry = await readCursorTelemetryFile(video, {});
+		expect(telemetry.samples).toEqual([
+			expect.objectContaining({ timeMs: 100, cx: 0.7, cy: 0.2, interactionType: "click" }),
+		]);
+	});
+
 	it("reads the sidecar next to the recording", async () => {
 		const video = path.join(dir, "rec.mp4");
 		await writeSidecar(video, {

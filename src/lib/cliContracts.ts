@@ -60,6 +60,8 @@ export interface CliSourcesRequest {
 
 /** An interactive editor session; finishing saves a project, without rendering. */
 export interface CliEditRequest {
+	/** Plan automatic camera zooms from recorded clicks before opening the editor. */
+	autoZoom?: boolean;
 	kind: "edit";
 	projectPath: string;
 	/** null updates projectPath in place. */

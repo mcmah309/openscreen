@@ -2796,7 +2796,7 @@ export function registerIpcHandlers(
 			// The helper collects cursor samples itself, from the same portal
 			// session that produced the pixels, so there is no separate sampler
 			// to stop and no clock offset to correct — the two are one recording.
-			if (cursorCaptureMode === "editable-overlay" && result.cursor.samples.length > 0) {
+			if (result.cursor.samples.length > 0) {
 				await fs.writeFile(
 					`${result.path}.cursor.json`,
 					JSON.stringify(result.cursor, null, 2),

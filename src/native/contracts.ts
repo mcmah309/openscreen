@@ -53,6 +53,8 @@ export interface NativeCursorAsset {
 }
 
 export interface CursorRecordingData {
+	/** Positions drive the camera; the original pointer is already in the video. */
+	cursorEmbedded?: boolean;
 	version: number;
 	provider: CursorProviderKind;
 	samples: CursorRecordingSample[];

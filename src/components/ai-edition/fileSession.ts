@@ -15,17 +15,22 @@ import {
 	useProjectStore,
 	waitForDocumentSaves,
 } from "@/lib/ai-edition/store/projectStore";
+import {
+	appendAutoZoomSuggestions,
+	collectAutoZoomSuggestionsForDocument,
+} from "@/lib/ai-edition/timeline/apply-auto-zooms";
 import { probeVideoDimensions, probeVideoDuration } from "@/lib/ai-edition/timeline/duration";
 import { nativeBridgeClient } from "@/native/client";
 
 /** Embed the editor in a caller-controlled, single-file workflow. */
 export interface EditorFileSession {
 	projectPath: string;
+	autoZoom?: boolean;
 	onFinish: (document: AxcutDocument) => Promise<void>;
 	onLoadError: (error: unknown) => void;
 }
 
-export async function loadEditorFile(projectPath: string): Promise<void> {
+export async function loadEditorFile(projectPath: string, autoZoom = false): Promise<void> {
 	const result = await window.electronAPI.loadProjectFileFromPath(projectPath);
 	if (!result.success || !result.project) {
 		throw new Error(result.error ?? result.message ?? "Failed to open project");
@@ -59,6 +64,12 @@ export async function loadEditorFile(projectPath: string): Promise<void> {
 				),
 			};
 		}
+	}
+	if (autoZoom) {
+		const suggestions = await collectAutoZoomSuggestionsForDocument(document, (videoPath) =>
+			nativeBridgeClient.cursor.getTelemetry(videoPath).catch(() => []),
+		);
+		document = appendAutoZoomSuggestions(document, suggestions);
 	}
 	const saved = await nativeBridgeClient.aiEdition.save(document);
 	if (!saved.success) throw new Error(saved.error ?? "Failed to import project");

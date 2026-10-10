@@ -8,9 +8,11 @@ import { migrateProjectDataToAxcutDocument } from "@/lib/ai-edition/document/mig
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { finishEditorFile, loadEditorFile } from "./fileSession";
 
-const bridge = vi.hoisted(() => ({ save: vi.fn(), get: vi.fn() }));
+const bridge = vi.hoisted(() => ({ save: vi.fn(), get: vi.fn(), getTelemetry: vi.fn() }));
 const probes = vi.hoisted(() => ({ probeVideoDuration: vi.fn(), probeVideoDimensions: vi.fn() }));
-vi.mock("@/native/client", () => ({ nativeBridgeClient: { aiEdition: bridge } }));
+vi.mock("@/native/client", () => ({
+	nativeBridgeClient: { aiEdition: bridge, cursor: { getTelemetry: bridge.getTelemetry } },
+}));
 vi.mock("@/lib/ai-edition/timeline/duration", () => probes);
 vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 
@@ -22,6 +24,7 @@ const legacy = {
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	bridge.getTelemetry.mockResolvedValue([]);
 	useProjectStore.getState().clear();
 	window.electronAPI = {
 		loadProjectFileFromPath: vi.fn(async () => ({ success: true, project: legacy })),
@@ -61,6 +64,35 @@ describe("editor file sessions", () => {
 		await loadEditorFile("/recordings/edited.openscreen");
 		expect(useProjectStore.getState().document).toEqual(doc);
 		expect(probes.probeVideoDuration).not.toHaveBeenCalled();
+	});
+
+	it("adds automatic camera zooms before editing only when requested", async () => {
+		bridge.getTelemetry.mockResolvedValue([
+			{ timeMs: 0, cx: 0.4, cy: 0.6, interactionType: "move" },
+			{ timeMs: 4000, cx: 0.4, cy: 0.6, interactionType: "click" },
+			{ timeMs: 12000, cx: 0.4, cy: 0.6, interactionType: "move" },
+		]);
+		await loadEditorFile("/recordings/take.openscreen");
+		expect(bridge.getTelemetry).not.toHaveBeenCalled();
+		expect(useProjectStore.getState().document?.zoomRanges).toHaveLength(0);
+		await loadEditorFile("/recordings/take.openscreen", true);
+		const zooms = useProjectStore.getState().document?.zoomRanges;
+		expect(zooms).toHaveLength(1);
+		expect(zooms?.[0]).toMatchObject({ startMs: 3500, endMs: 5500, focusMode: "auto" });
+		const doc = useProjectStore.getState().document!;
+		vi.mocked(window.electronAPI.loadProjectFileFromPath).mockResolvedValue({
+			success: true,
+			project: doc,
+		});
+		await loadEditorFile("/recordings/take.openscreen", true);
+		expect(useProjectStore.getState().document?.zoomRanges).toHaveLength(1);
+	});
+
+	it("allows editing when optional cursor telemetry cannot be read", async () => {
+		bridge.getTelemetry.mockRejectedValue(new Error("missing cursor file"));
+		await loadEditorFile("/recordings/take.openscreen", true);
+		expect(useProjectStore.getState().status).toBe("ready");
+		expect(useProjectStore.getState().document?.zoomRanges).toHaveLength(0);
 	});
 
 	it("reports load and import failures rather than falling back to another project", async () => {

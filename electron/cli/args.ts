@@ -85,6 +85,7 @@ Usage:
   openscreen help                                    Show this help
 
 Edit options:
+  --auto-zoom               Add automatic zooms from cursor telemetry before editing
   -o, --out <path>          Save the edited .openscreen project here (default: update in place)
   --json                    NDJSON events/result on stdout
   Click Done to save and return. Closing the window cancels without writing the output.
@@ -196,6 +197,8 @@ function parseEdit(args: string[], cwd: string): CliCommand {
 			const [value, next] = takeValue(args, i, arg);
 			request.outPath = resolvePath(value, cwd);
 			i = next;
+		} else if (arg === "--auto-zoom") {
+			request.autoZoom = true;
 		} else if (arg === "--json") {
 			request.json = true;
 		} else if (arg.startsWith("-")) {
