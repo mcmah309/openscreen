@@ -15,6 +15,8 @@
   patchelfUnstable,
   binutils,
   vulkan-loader,
+  makeFontsConf,
+  dejavu_fonts,
 }:
 
 let
@@ -183,6 +185,10 @@ rustPlatform.buildRustPackage {
   # build environment otherwise finds nixpkgs' original libraries first.
   preCheck = ''
     export LD_LIBRARY_PATH="$FFMPEG_DIR/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    # Text layout also exercises the system-font fallback. Supply it explicitly
+    # in the sandbox instead of depending on the builder's installed fonts.
+    export FONTCONFIG_FILE="${makeFontsConf { fontDirectories = [ dejavu_fonts ]; }}"
+    export OPENSCREEN_FONTS_DIR="$NIX_BUILD_TOP/source/public/fonts"
   '';
   cargoTestFlags = [
     "-p"
